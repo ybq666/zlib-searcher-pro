@@ -150,13 +150,37 @@ body {
   color: var(--text-muted);
 }
 
-.user-info a {
+.user-info a,
+.auth-action-link {
   color: var(--primary);
   text-decoration: none;
   font-weight: 600;
 }
 
-.user-info a:hover {
+.user-info a:hover,
+.auth-action-link:hover {
+  text-decoration: underline;
+}
+
+.auth-sep {
+  color: #cbd5e1;
+  margin: 0 4px;
+}
+
+.auth-action-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  transition: color 0.15s;
+}
+
+.auth-action-btn:hover {
+  color: var(--primary-hover);
   text-decoration: underline;
 }
 

@@ -6,7 +6,14 @@ import {
   sortNodesBySpeed,
   requestHostPermissionForUrl
 } from '../services/nodeManager';
-import { getAuthState, fetchUserProfile } from '../services/auth';
+import {
+  getAuthState,
+  fetchUserProfile,
+  loginWithCredentials,
+  sniffAllZLibCookies,
+  syncCookiesToNode,
+  listenCookieChanges
+} from '../services/auth';
 import { syncMirrorsFromRemote } from '../services/mirrorCrawler';
 
 let currentSettings: AppSettings;
@@ -20,6 +27,13 @@ const btnShowAddModal = document.getElementById('btn-show-add-modal') as HTMLBut
 const syncStatusText = document.getElementById('sync-status-text') as HTMLElement;
 
 const authBadge = document.getElementById('auth-badge') as HTMLElement;
+const directLoginForm = document.getElementById('direct-login-form') as HTMLFormElement;
+const inputEmail = document.getElementById('input-email') as HTMLInputElement;
+const inputPassword = document.getElementById('input-password') as HTMLInputElement;
+const btnDirectLogin = document.getElementById('btn-direct-login') as HTMLButtonElement;
+const btnSniffCookies = document.getElementById('btn-sniff-cookies') as HTMLButtonElement;
+const btnOpenLoginTab = document.getElementById('btn-open-login-tab') as HTMLAnchorElement;
+
 const authForm = document.getElementById('auth-form') as HTMLFormElement;
 const inputUserId = document.getElementById('input-userid') as HTMLInputElement;
 const inputUserKey = document.getElementById('input-userkey') as HTMLInputElement;
@@ -45,6 +59,11 @@ async function init() {
   renderNodesTable();
   bindEvents();
   checkAuthStatus();
+
+  // 监听浏览器 Cookie 变更，当用户在其它网页完成登录时自动刷新状态
+  listenCookieChanges(() => {
+    checkAuthStatus();
+  });
 }
 
 function populateForm() {
@@ -53,10 +72,17 @@ function populateForm() {
   prefAutoSync.checked = currentSettings.autoSyncMirrors ?? true;
   prefAutoSpeedtest.checked = currentSettings.autoSpeedTest;
   prefDefaultExt.value = currentSettings.defaultExtension || 'all';
+  btnOpenLoginTab.href = `${currentSettings.activeNodeUrl.replace(/\/+$/, '')}/login`;
   updateSyncStatusDisplay();
 }
 
 function bindEvents() {
+  // Direct login with email and password
+  directLoginForm.addEventListener('submit', handleDirectLogin);
+
+  // Sniff cookies across all domains
+  btnSniffCookies.addEventListener('click', handleSniffCookies);
+
   // Sync mirrors from Awesome-Zlibrary
   btnSyncMirrors.addEventListener('click', handleSyncMirrors);
 
@@ -378,11 +404,75 @@ async function checkAuthStatus() {
 
   const authState = await getAuthState(currentSettings.activeNodeUrl);
   if (authState.isLoggedIn && authState.userProfile) {
-    authBadge.textContent = `已认证: ${authState.userProfile.name} (今日已下载 ${authState.userProfile.downloads_today}/${authState.userProfile.downloads_limit})`;
+    const from = authState.fromSource ? ` · [${authState.fromSource}]` : '';
+    authBadge.textContent = `已认证: ${authState.userProfile.name} (今日已下载 ${authState.userProfile.downloads_today}/${authState.userProfile.downloads_limit})${from}`;
     authBadge.className = 'badge online';
   } else {
     authBadge.textContent = '未检测到有效登录凭据';
     authBadge.className = 'badge';
+  }
+}
+
+async function handleDirectLogin(e: Event) {
+  e.preventDefault();
+  const email = inputEmail.value.trim();
+  const password = inputPassword.value;
+
+  if (!email || !password) return;
+
+  btnDirectLogin.disabled = true;
+  btnDirectLogin.innerHTML = '<span>正在请求 Z-Library 登录并绑定...</span>';
+
+  try {
+    const res = await loginWithCredentials(currentSettings.activeNodeUrl, email, password);
+    if (res.success) {
+      currentSettings = await getSettings();
+      inputUserId.value = currentSettings.manualUserId || '';
+      inputUserKey.value = currentSettings.manualUserKey || '';
+      inputPassword.value = '';
+      showToast(res.message, 'success');
+      await checkAuthStatus();
+    } else {
+      showToast(`登录失败: ${res.message}`, 'error');
+    }
+  } catch (err: any) {
+    showToast(`登录请求异常: ${err.message}`, 'error');
+  } finally {
+    btnDirectLogin.disabled = false;
+    btnDirectLogin.innerHTML = '<span>🚀 登录并绑定凭据</span>';
+  }
+}
+
+async function handleSniffCookies() {
+  btnSniffCookies.disabled = true;
+  btnSniffCookies.innerHTML = '<span>正在全域扫描浏览器 Cookie...</span>';
+
+  try {
+    const sniffed = await sniffAllZLibCookies();
+    if (sniffed.userId && sniffed.userKey) {
+      currentSettings.manualUserId = sniffed.userId;
+      currentSettings.manualUserKey = sniffed.userKey;
+      await saveSettings(currentSettings);
+      await syncCookiesToNode(currentSettings.activeNodeUrl, sniffed.userId, sniffed.userKey);
+
+      inputUserId.value = sniffed.userId;
+      inputUserKey.value = sniffed.userKey;
+      await checkAuthStatus();
+      showToast(`嗅探成功！已从站点 ${sniffed.fromDomain || '已登录网页'} 提取 Cookie 并同步。`, 'success');
+    } else {
+      showToast('未检测到任何 Z-Library 镜像站的登录凭据。建议使用上方的“账号密码直接登录”或在网页登录成功后重试。', 'error');
+    }
+  } catch (err: any) {
+    showToast(`嗅探失败: ${err.message}`, 'error');
+  } finally {
+    btnSniffCookies.disabled = false;
+    btnSniffCookies.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <span>🔍 一键扫描并提取 Cookie</span>
+    `;
   }
 }
 

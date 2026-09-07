@@ -26,27 +26,6 @@
     "downloads"
   ],
   "host_permissions": [
-    "*://*.z-lib.sk/*",
-    "*://*.z-lib.fm/*",
-    "*://*.z-lib.gd/*",
-    "*://*.z-library.website/*",
-    "*://*.z-library.qa/*",
-    "*://*.z-library.im/*",
-    "*://*.zlib.li/*",
-    "*://*.z-library.gy/*",
-    "*://*.z-lib.by/*",
-    "*://*.101su.ru/*",
-    "*://*.intcn.online/*",
-    "*://*.z-lib.rest/*",
-    "*://*.intl.su/*",
-    "*://*.singlelogin.re/*",
-    "*://*.singlelogin.rs/*",
-    "*://*.singlelogin.se/*",
-    "*://cdn.jsdelivr.net/*",
-    "*://raw.githubusercontent.com/*",
-    "*://api.github.com/*"
-  ],
-  "optional_host_permissions": [
     "*://*/*"
   ]
 }

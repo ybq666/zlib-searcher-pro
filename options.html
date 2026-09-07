@@ -101,37 +101,77 @@
         </div>
 
         <p class="card-desc">
-          下载图书需要 Z-Library 账号登录凭据（未登录仅支持搜索）。只要您在浏览器中打开并登录过任意官方镜像，插件通常会<strong>自动读取 Cookie</strong>。如果自动读取受阻，您也可以在此手动填入。
+          下载图书需要 Z-Library 账号登录凭据（未登录仅支持检索）。我们提供了以下三种极其便捷的凭据绑定方式：
         </p>
 
-        <form id="auth-form" class="auth-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="input-userid">User ID (remix_userid)：</label>
-              <input type="text" id="input-userid" placeholder="例如：12345678" />
-              <span class="field-hint">对应 Cookie 中的 remix_userid</span>
-            </div>
-            <div class="form-group">
-              <label for="input-userkey">User Key (remix_userkey)：</label>
-              <input type="password" id="input-userkey" placeholder="例如：a9f8b2c4..." />
-              <span class="field-hint">对应 Cookie 中的 remix_userkey</span>
-            </div>
+        <!-- 方式一：账号密码直接登录（最推荐） -->
+        <div class="auth-section-box">
+          <div class="auth-section-title">
+            <strong>方式一：输入 Z-Library 账号密码直接登录（推荐）</strong>
+            <span class="tag-recommend">最简单</span>
           </div>
+          <p class="auth-section-desc">直接在此输入您的 Z-Library 注册邮箱与密码，插件将通过官方接口直连登录并自动获取认证凭据与额度。</p>
+          <form id="direct-login-form" class="direct-login-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="input-email">登录邮箱 / 用户名：</label>
+                <input type="text" id="input-email" placeholder="例如：your_email@domain.com" required autocomplete="username" />
+              </div>
+              <div class="form-group">
+                <label for="input-password">登录密码：</label>
+                <input type="password" id="input-password" placeholder="请输入您的密码" required autocomplete="current-password" />
+              </div>
+            </div>
+            <div class="form-buttons">
+              <button type="submit" id="btn-direct-login" class="btn btn-primary">
+                <span>🚀 登录并绑定凭据</span>
+              </button>
+            </div>
+          </form>
+        </div>
 
+        <!-- 方式二：从浏览器已登录页面一键嗅探 -->
+        <div class="auth-section-box">
+          <div class="auth-section-title">
+            <strong>方式二：从已登录的网页一键提取 Cookie</strong>
+          </div>
+          <p class="auth-section-desc">如果您刚刚在弹出的 Z-Library 或 SingleLogin 网页上完成了登录或人机验证，点击下方按钮，插件将跨域扫描并提取登录状态。</p>
           <div class="form-buttons">
-            <button type="submit" id="btn-save-auth" class="btn btn-primary">保存凭据</button>
-            <button type="button" id="btn-test-auth" class="btn btn-outline">测试当前凭据</button>
-            <button type="button" id="btn-clear-auth" class="btn btn-ghost">清空手动凭据</button>
+            <button type="button" id="btn-sniff-cookies" class="btn btn-secondary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <span>🔍 一键扫描并提取 Cookie</span>
+            </button>
+            <a id="btn-open-login-tab" href="#" target="_blank" class="btn btn-outline">
+              <span>打开当前镜像登录页</span>
+            </a>
           </div>
-        </form>
+        </div>
 
-        <div class="tips-box">
-          <strong>💡 如何获取这两个参数？</strong>
-          <ol>
-            <li>在任意 Z-Library 官方站点登录您的账号；</li>
-            <li>按下 <kbd>F12</kbd> 打开开发者工具，切换到 <strong>Application (应用)</strong> -> <strong>Cookies</strong>；</li>
-            <li>找到 <code>remix_userid</code> 和 <code>remix_userkey</code>，复制其对应 Value 填入上方保存即可。</li>
-          </ol>
+        <!-- 方式三：手动输入 remix_userid 与 remix_userkey -->
+        <div class="auth-section-box">
+          <div class="auth-section-title">
+            <strong>方式三：手动填入凭据（高级备选）</strong>
+          </div>
+          <form id="auth-form" class="auth-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="input-userid">User ID (remix_userid)：</label>
+                <input type="text" id="input-userid" placeholder="例如：12345678" />
+              </div>
+              <div class="form-group">
+                <label for="input-userkey">User Key (remix_userkey)：</label>
+                <input type="password" id="input-userkey" placeholder="例如：a9f8b2c4..." />
+              </div>
+            </div>
+            <div class="form-buttons">
+              <button type="submit" id="btn-save-auth" class="btn btn-primary">保存手动凭据</button>
+              <button type="button" id="btn-test-auth" class="btn btn-outline">测试当前凭据</button>
+              <button type="button" id="btn-clear-auth" class="btn btn-ghost">清空所有凭据</button>
+            </div>
+          </form>
         </div>
       </section>
 

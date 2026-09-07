@@ -1,7 +1,13 @@
 import { AppSettings, Book, BookSearchResponse } from '../types';
-import { getSettings, getSessionCache, setSessionCache } from '../services/storage';
+import { getSettings, saveSettings, getSessionCache, setSessionCache } from '../services/storage';
 import { testNodeLatency } from '../services/nodeManager';
-import { getAuthState, AuthState } from '../services/auth';
+import {
+  getAuthState,
+  AuthState,
+  sniffAllZLibCookies,
+  syncCookiesToNode,
+  listenCookieChanges
+} from '../services/auth';
 import { searchBooks, fetchDownloadUrl, downloadBookFile } from '../services/api';
 import { syncMirrorsFromRemote } from '../services/mirrorCrawler';
 
@@ -95,6 +101,14 @@ async function init() {
       });
     }
   }
+
+  // 监听 Cookie 变化或标签页焦点切换，用户在网页登录完成后自动激活
+  listenCookieChanges(() => {
+    checkAuthAndUser();
+  });
+  window.addEventListener('focus', () => {
+    checkAuthAndUser();
+  });
 }
 
 function bindEvents() {
@@ -226,7 +240,50 @@ async function checkAuthAndUser() {
     quotaInfoEl.classList.remove('hidden');
   } else {
     quotaInfoEl.classList.add('hidden');
-    userStatusTextEl.innerHTML = `未登录 · <a href="${escapeHtml(currentSettings.activeNodeUrl)}/login" target="_blank">前往网页登录</a> 或在设置填入凭据`;
+    userStatusTextEl.innerHTML = `
+      <span>未登录 ·</span>
+      <a href="${escapeHtml(currentSettings.activeNodeUrl)}/login" target="_blank" class="auth-action-link" title="在浏览器新标签页打开官方登录界面">网页登录</a>
+      <span class="auth-sep">|</span>
+      <button type="button" id="btn-quick-sniff" class="auth-action-btn" title="在网页登录成功后点击立即提取 Cookie">提取凭据</button>
+      <span class="auth-sep">|</span>
+      <button type="button" id="btn-quick-login" class="auth-action-btn" title="直接输入账号密码登录">账号登录</button>
+    `;
+
+    // 绑定快捷提取凭据按钮
+    const quickSniffBtn = document.getElementById('btn-quick-sniff');
+    if (quickSniffBtn) {
+      quickSniffBtn.addEventListener('click', async () => {
+        quickSniffBtn.textContent = '嗅探中...';
+        try {
+          const sniffed = await sniffAllZLibCookies();
+          if (sniffed.userId && sniffed.userKey) {
+            currentSettings.manualUserId = sniffed.userId;
+            currentSettings.manualUserKey = sniffed.userKey;
+            await saveSettings(currentSettings);
+            await syncCookiesToNode(currentSettings.activeNodeUrl, sniffed.userId, sniffed.userKey);
+            await checkAuthAndUser();
+            showNotification(`提取成功！欢迎回来`, 'success', 3000);
+          } else {
+            showNotification('未在浏览器中找到登录 Cookie，建议点击“账号登录”直接输入密码', 'error', 4500);
+            quickSniffBtn.textContent = '提取凭据';
+          }
+        } catch {
+          quickSniffBtn.textContent = '提取凭据';
+        }
+      });
+    }
+
+    // 绑定账号登录跳转
+    const quickLoginBtn = document.getElementById('btn-quick-login');
+    if (quickLoginBtn) {
+      quickLoginBtn.addEventListener('click', () => {
+        if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+          chrome.runtime.openOptionsPage();
+        } else {
+          window.open('/options.html');
+        }
+      });
+    }
   }
 }
 
