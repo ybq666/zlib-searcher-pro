@@ -1,0 +1,16 @@
+{
+  "name": "zlib-searcher-pro",
+  "version": "1.0.0",
+  "description": "Z-Library Searcher Pro - 支持多镜像测速、自动选优、凭据同步与一键高速下载的 Chrome 扩展",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.280",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
+  }
+}

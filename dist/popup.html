@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Z-Library 搜索助手</title>
+  <script type="module" crossorigin src="./assets/popup.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/mirrorCrawler.js">
+  <link rel="stylesheet" crossorigin href="./assets/popup.css">
+</head>
+<body>
+  <div id="app" class="popup-container">
+    <!-- 顶部状态栏 -->
+    <header class="top-nav">
+      <div class="brand">
+        <img src="./icons/icon-32.png" alt="Logo" class="logo">
+        <span class="title">Z-Library 搜索</span>
+      </div>
+
+      <div class="nav-actions">
+        <!-- 节点状态 -->
+        <button id="node-selector-btn" class="node-badge" title="点击切换或查看镜像测速">
+          <span class="status-dot"></span>
+          <span id="active-node-name" class="node-name">检测中...</span>
+          <span id="active-node-latency" class="latency-tag">--</span>
+        </button>
+
+        <!-- 设置按钮 -->
+        <button id="open-settings-btn" class="icon-btn" title="偏好与镜像设置">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 用户登录/限额信息条 -->
+    <div id="user-bar" class="user-bar">
+      <div id="user-info" class="user-info">
+        <span id="user-status-text">正在检查登录状态...</span>
+      </div>
+      <div id="quota-info" class="quota-info hidden">
+        今日已下载: <strong id="quota-used">0</strong> / <span id="quota-limit">10</span>
+      </div>
+    </div>
+
+    <!-- 搜索主区域 -->
+    <div class="search-section">
+      <form id="search-form" class="search-form">
+        <div class="search-input-wrapper">
+          <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input
+            id="search-input"
+            type="text"
+            placeholder="搜索书名、作者、ISBN 或出版社..."
+            autocomplete="off"
+            autofocus
+          />
+          <button type="button" id="clear-search-btn" class="clear-btn hidden" title="清空">×</button>
+        </div>
+        <button type="submit" id="submit-btn" class="submit-btn">搜索</button>
+      </form>
+
+      <!-- 格式快捷筛选 -->
+      <div class="filter-group">
+        <span class="filter-label">格式：</span>
+        <div id="format-filters" class="filter-pills">
+          <button type="button" class="pill active" data-ext="all">全部</button>
+          <button type="button" class="pill" data-ext="epub">EPUB</button>
+          <button type="button" class="pill" data-ext="pdf">PDF</button>
+          <button type="button" class="pill" data-ext="mobi">MOBI</button>
+          <button type="button" class="pill" data-ext="azw3">AZW3</button>
+          <button type="button" class="pill" data-ext="txt">TXT</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 提示与状态信息条 -->
+    <div id="notification-bar" class="notification-bar hidden"></div>
+
+    <!-- 结果概况 -->
+    <div id="result-meta" class="result-meta hidden">
+      <span>找到约 <strong id="total-count">0</strong> 本图书</span>
+    </div>
+
+    <!-- 图书结果滚动区域 -->
+    <main id="book-scroll-container" class="book-scroll-container">
+      <!-- 初始欢迎占位 -->
+      <div id="welcome-view" class="welcome-view">
+        <div class="welcome-icon">📚</div>
+        <h3>海量图书 即刻检索</h3>
+        <p>输入书名或作者，直接对接官方镜像高速下载。</p>
+        <div class="quick-tips">
+          <div class="tip-tag">💡 小技巧：在设置中可一键测速或添加个人专属域名</div>
+        </div>
+      </div>
+
+      <!-- 加载动画 -->
+      <div id="loading-spinner" class="loading-spinner hidden">
+        <div class="spinner"></div>
+        <p id="loading-text">正在检索图书资源...</p>
+      </div>
+
+      <!-- 列表容器 -->
+      <div id="book-list" class="book-list"></div>
+
+      <!-- 加载更多 -->
+      <div id="load-more-wrapper" class="load-more-wrapper hidden">
+        <button id="load-more-btn" class="load-more-btn">加载下一页</button>
+      </div>
+    </main>
+  </div>
+
+</body>
+</html>

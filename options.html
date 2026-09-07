@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Z-Library 搜索助手 - 偏好与镜像设置</title>
+  <link rel="stylesheet" href="/src/options/options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header class="header">
+      <div class="header-brand">
+        <img src="/icons/icon-48.png" alt="Logo" class="logo">
+        <div>
+          <h1>Z-Library 搜索助手 · 设置中心</h1>
+          <p class="subtitle">管理官方及镜像节点、网络延迟测速、认证凭据与全局偏好</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a href="https://github.com/dongyubin/Awesome-Zlibrary" target="_blank" class="link-btn">
+          <span>查看最新可用镜像源</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/>
+            <line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+        </a>
+      </div>
+    </header>
+
+    <!-- 提示通知栏 -->
+    <div id="toast" class="toast hidden"></div>
+
+    <main class="main-content">
+      <!-- 卡片 1: 镜像管理与测速 -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">⚡</span>
+            <h2>镜像节点与延迟测速</h2>
+          </div>
+          <div class="card-actions">
+            <button id="btn-speedtest-all" class="btn btn-primary">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              <span>一键全面测速</span>
+            </button>
+            <button id="btn-sync-mirrors" class="btn btn-secondary" title="从 Awesome-Zlibrary 自动爬取并更新最新公布的可用镜像源">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="23 4 23 10 17 10"/>
+                <polyline points="1 20 1 14 7 14"/>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+              </svg>
+              <span>同步云端镜像源</span>
+            </button>
+            <button id="btn-auto-best" class="btn btn-outline" title="自动选出当前响应最快的可用节点">
+              <span>自动优选最快节点</span>
+            </button>
+            <button id="btn-show-add-modal" class="btn btn-secondary">
+              <span>+ 添加自定义节点</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="card-desc-wrapper">
+          <p class="card-desc">
+            Z-Library 镜像站点因网络环境可能存在波动。插件支持直接从 Awesome-Zlibrary 爬取最新验证通过的镜像源，实时检测延迟并自由切换。
+          </p>
+          <span id="sync-status-text" class="sync-status-text">上次同步: 尚未同步</span>
+        </div>
+
+        <!-- 节点表格 -->
+        <div class="table-wrapper">
+          <table class="nodes-table">
+            <thead>
+              <tr>
+                <th width="80">当前使用</th>
+                <th>节点名称</th>
+                <th>网址 (URL)</th>
+                <th width="120">网络延迟</th>
+                <th width="100">状态</th>
+                <th width="180">操作</th>
+              </tr>
+            </thead>
+            <tbody id="nodes-tbody">
+              <!-- 动态注入 -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 卡片 2: 用户认证与密钥管理 -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">🔑</span>
+            <h2>认证与凭据管理</h2>
+          </div>
+          <div id="auth-badge" class="badge">检查中...</div>
+        </div>
+
+        <p class="card-desc">
+          下载图书需要 Z-Library 账号登录凭据（未登录仅支持搜索）。只要您在浏览器中打开并登录过任意官方镜像，插件通常会<strong>自动读取 Cookie</strong>。如果自动读取受阻，您也可以在此手动填入。
+        </p>
+
+        <form id="auth-form" class="auth-form">
+          <div class="form-row">
+            <div class="form-group">
+              <label for="input-userid">User ID (remix_userid)：</label>
+              <input type="text" id="input-userid" placeholder="例如：12345678" />
+              <span class="field-hint">对应 Cookie 中的 remix_userid</span>
+            </div>
+            <div class="form-group">
+              <label for="input-userkey">User Key (remix_userkey)：</label>
+              <input type="password" id="input-userkey" placeholder="例如：a9f8b2c4..." />
+              <span class="field-hint">对应 Cookie 中的 remix_userkey</span>
+            </div>
+          </div>
+
+          <div class="form-buttons">
+            <button type="submit" id="btn-save-auth" class="btn btn-primary">保存凭据</button>
+            <button type="button" id="btn-test-auth" class="btn btn-outline">测试当前凭据</button>
+            <button type="button" id="btn-clear-auth" class="btn btn-ghost">清空手动凭据</button>
+          </div>
+        </form>
+
+        <div class="tips-box">
+          <strong>💡 如何获取这两个参数？</strong>
+          <ol>
+            <li>在任意 Z-Library 官方站点登录您的账号；</li>
+            <li>按下 <kbd>F12</kbd> 打开开发者工具，切换到 <strong>Application (应用)</strong> -> <strong>Cookies</strong>；</li>
+            <li>找到 <code>remix_userid</code> 和 <code>remix_userkey</code>，复制其对应 Value 填入上方保存即可。</li>
+          </ol>
+        </div>
+      </section>
+
+      <!-- 卡片 3: 通用偏好 -->
+      <section class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="icon">⚙️</span>
+            <h2>偏好设置</h2>
+          </div>
+        </div>
+
+        <div class="preference-list">
+          <div class="pref-item">
+            <div class="pref-info">
+              <div class="pref-title">定期在线同步最新镜像源</div>
+              <div class="pref-desc">开启后，插件将定期（每天）自动从 Awesome-Zlibrary 爬取最新验证可用的镜像，防范站点被墙失联。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="pref-auto-sync" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="pref-item">
+            <div class="pref-info">
+              <div class="pref-title">自动优选节点</div>
+              <div class="pref-desc">每次启动或打开搜索弹窗时，在后台自动测试并提示切换更快的可用节点。</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="pref-auto-speedtest" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="pref-item">
+            <div class="pref-info">
+              <div class="pref-title">默认优先搜索格式</div>
+              <div class="pref-desc">在搜索框下默认预选的文件扩展名分类。</div>
+            </div>
+            <select id="pref-default-ext" class="select-input">
+              <option value="all">全格式 (默认)</option>
+              <option value="epub">EPUB</option>
+              <option value="pdf">PDF</option>
+              <option value="mobi">MOBI</option>
+              <option value="azw3">AZW3</option>
+              <option value="txt">TXT</option>
+            </select>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- 添加自定义节点弹窗 -->
+    <div id="add-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>添加自定义节点或镜像</h3>
+          <button id="modal-close-btn" class="modal-close">&times;</button>
+        </div>
+        <form id="add-node-form">
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="custom-node-name">节点名称：</label>
+              <input type="text" id="custom-node-name" placeholder="例如：我的私有镜像 / Z-Lib 备用" required />
+            </div>
+            <div class="form-group">
+              <label for="custom-node-url">节点网址 (必须以 http:// 或 https:// 开头)：</label>
+              <input type="url" id="custom-node-url" placeholder="https://example-mirror.org" required />
+            </div>
+            <div class="modal-tip">
+              注：添加新域名可能需要向 Chrome 动态申请网络访问权限。
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" id="modal-cancel-btn" class="btn btn-ghost">取消</button>
+            <button type="submit" class="btn btn-primary">确认添加并测速</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/options/options.ts"></script>
+</body>
+</html>
