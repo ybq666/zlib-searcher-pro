@@ -1,5 +1,6 @@
 import { Book, BookSearchResponse } from '../types';
 import { resolveCredentials } from './auth';
+import { getSettings, saveSettings } from './storage';
 
 export interface SearchOptions {
   page?: number;
@@ -21,116 +22,182 @@ export async function searchBooks(
   options: SearchOptions = {}
 ): Promise<BookSearchResponse> {
   const { page = 1, limit = 20, extension } = options;
-  const { userId, userKey } = await resolveCredentials(baseUrl);
 
-  const endpoint = `${baseUrl.replace(/\/+$/, '')}/eapi/book/search`;
-  const formData = new FormData();
-  
-  // Format query with extension filter if specified
-  let searchMessage = query.trim();
-  if (extension && extension !== 'all') {
-    formData.append('extensions[]', extension);
-  }
-  formData.set('message', searchMessage);
-  formData.set('limit', limit.toString());
-  formData.set('page', page.toString());
+  const settings = await getSettings();
+  const candidateUrls = Array.from(
+    new Set([
+      baseUrl,
+      settings.activeNodeUrl,
+      'https://z-library.website',
+      'https://z-lib.by',
+      'http://z-lib.sk',
+      ...settings.nodes.map((n) => n.url)
+    ].filter(Boolean))
+  );
 
-  const headers: Record<string, string> = {};
-  if (userId && userKey) {
-    headers['remix-userid'] = userId;
-    headers['remix-userkey'] = userKey;
-  }
+  let lastError: Error | null = null;
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: formData
-  });
-
-  if (!response.ok) {
-    throw new Error(`搜索接口异常 HTTP ${response.status}`);
-  }
-
-  const data = await response.json();
-  if (!data.books) {
-    return {
-      success: data.success || 0,
-      exactBooksCount: 0,
-      books: [],
-      pagination: {
-        current: page,
-        limit,
-        before: false,
-        next: 0,
-        total_items: 0,
-        total_pages: 0
+  for (const nodeUrl of candidateUrls) {
+    try {
+      const { userId, userKey } = await resolveCredentials(nodeUrl);
+      const endpoint = `${nodeUrl.replace(/\/+$/, '')}/eapi/book/search`;
+      const formData = new FormData();
+      
+      const searchMessage = query.trim();
+      if (extension && extension !== 'all') {
+        formData.append('extensions[]', extension);
       }
-    };
+      formData.set('message', searchMessage);
+      formData.set('limit', limit.toString());
+      formData.set('page', page.toString());
+
+      const headers: Record<string, string> = {};
+      if (userId && userKey) {
+        headers['remix-userid'] = userId;
+        headers['remix-userkey'] = userKey;
+      }
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: formData,
+        credentials: 'include',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // 如果备用节点成功，自动将设置切为该存活节点
+      if (nodeUrl !== settings.activeNodeUrl) {
+        settings.activeNodeUrl = nodeUrl;
+        await saveSettings(settings);
+      }
+
+      if (!data.books) {
+        return {
+          success: data.success || 0,
+          exactBooksCount: 0,
+          books: [],
+          pagination: {
+            current: page,
+            limit,
+            before: false,
+            next: 0,
+            total_items: 0,
+            total_pages: 0
+          }
+        };
+      }
+
+      const books: Book[] = data.books.map((b: any) => ({
+        id: b.id,
+        hash: b.hash,
+        title: b.title || '无标题',
+        author: b.author || '未知作者',
+        publisher: b.publisher || '',
+        year: b.year || '',
+        language: b.language || '',
+        extension: (b.extension || '').toUpperCase(),
+        filesize: b.filesize || '0',
+        filesizeString: formatFileSize(b.filesize),
+        cover: b.cover || '',
+        pages: b.pages && b.pages !== '0' ? b.pages : undefined,
+        readOnlineUrl: b.readOnlineUrl || undefined,
+        description: b.description || '',
+        rating: b.rating || ''
+      }));
+
+      return {
+        success: data.success || 1,
+        exactBooksCount: data.exactBooksCount || 0,
+        books,
+        pagination: {
+          current: data.pagination?.current || page,
+          limit: data.pagination?.limit || limit,
+          before: !!data.pagination?.before,
+          next: data.pagination?.next || 0,
+          total_items: data.pagination?.total_items || books.length,
+          total_pages: data.pagination?.total_pages || 1
+        }
+      };
+    } catch (err: any) {
+      console.warn(`[Z-Lib API] 镜像节点 ${nodeUrl} 搜索失败，尝试下一节点...`, err.message);
+      lastError = err;
+    }
   }
 
-  const books: Book[] = data.books.map((b: any) => ({
-    id: b.id,
-    hash: b.hash,
-    title: b.title || '无标题',
-    author: b.author || '未知作者',
-    publisher: b.publisher || '',
-    year: b.year || '',
-    language: b.language || '',
-    extension: (b.extension || '').toUpperCase(),
-    filesize: b.filesize || '0',
-    filesizeString: formatFileSize(b.filesize),
-    cover: b.cover || '',
-    pages: b.pages && b.pages !== '0' ? b.pages : undefined,
-    readOnlineUrl: b.readOnlineUrl || undefined,
-    description: b.description || '',
-    rating: b.rating || ''
-  }));
-
-  return {
-    success: data.success || 1,
-    exactBooksCount: data.exactBooksCount || 0,
-    books,
-    pagination: {
-      current: data.pagination?.current || page,
-      limit: data.pagination?.limit || limit,
-      before: !!data.pagination?.before,
-      next: data.pagination?.next || 0,
-      total_items: data.pagination?.total_items || books.length,
-      total_pages: data.pagination?.total_pages || 1
-    }
-  };
+  throw lastError || new Error('所有可用镜像节点搜索均超时或不可用');
 }
 
 export async function fetchDownloadUrl(
   baseUrl: string,
   book: Book
 ): Promise<string> {
-  const { userId, userKey } = await resolveCredentials(baseUrl);
-  if (!userId || !userKey) {
-    throw new Error('请先在当前镜像站登录，或在设置中填入 UserKey 凭据才能下载。');
-  }
+  const settings = await getSettings();
+  const candidateUrls = Array.from(
+    new Set([
+      baseUrl,
+      settings.activeNodeUrl,
+      'https://z-library.website',
+      'https://z-lib.by',
+      'http://z-lib.sk',
+      ...settings.nodes.map((n) => n.url)
+    ].filter(Boolean))
+  );
 
-  const endpoint = `${baseUrl.replace(/\/+$/, '')}/eapi/book/${book.id}/${book.hash}/file`;
-  const res = await fetch(endpoint, {
-    method: 'GET',
-    headers: {
-      'remix-userid': userId,
-      'remix-userkey': userKey
+  let lastError: Error | null = null;
+
+  for (const nodeUrl of candidateUrls) {
+    try {
+      const { userId, userKey } = await resolveCredentials(nodeUrl);
+      if (!userId || !userKey) {
+        throw new Error('请先在当前镜像站登录，或在设置中填入 UserKey 凭据才能下载。');
+      }
+
+      const endpoint = `${nodeUrl.replace(/\/+$/, '')}/eapi/book/${book.id}/${book.hash}/file`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      const res = await fetch(endpoint, {
+        method: 'GET',
+        headers: {
+          'remix-userid': userId,
+          'remix-userkey': userKey
+        },
+        credentials: 'include',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`获取下载地址失败 (HTTP ${res.status})`);
+      }
+
+      const data = await res.json();
+      if (data?.file?.downloadLink) {
+        return data.file.downloadLink;
+      }
+      if (data?.downloadLink) {
+        return data.downloadLink;
+      }
+      if (data?.message) {
+        throw new Error(data.message);
+      }
+    } catch (err: any) {
+      console.warn(`[Z-Lib API] 镜像节点 ${nodeUrl} 获取下载地址失败:`, err.message);
+      lastError = err;
     }
-  });
-
-  if (!res.ok) {
-    throw new Error(`获取下载地址失败 (HTTP ${res.status})`);
   }
 
-  const data = await res.json();
-  if (data?.file?.downloadLink) {
-    return data.file.downloadLink;
-  }
-  if (data?.downloadLink) {
-    return data.downloadLink;
-  }
-  throw new Error(data?.message || '未能解析到可用的下载链接');
+  throw lastError || new Error('未能解析到可用的下载链接');
 }
 
 export async function downloadBookFile(
