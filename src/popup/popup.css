@@ -528,6 +528,49 @@ body {
   background-color: var(--bg-sub);
 }
 
+.btn-copy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-main);
+  background: #fff;
+  border: 1px solid var(--border);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-copy-link:hover {
+  background-color: var(--bg-sub);
+  border-color: #cbd5e1;
+  color: var(--primary);
+}
+
+.btn-copy-link.loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.btn-copy-link.copied {
+  background-color: #ecfdf5;
+  border-color: #86efac;
+  color: #16a34a;
+  font-weight: 500;
+}
+
+.mini-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--border);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
 .btn-download {
   display: inline-flex;
   align-items: center;

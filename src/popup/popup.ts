@@ -448,6 +448,20 @@ function renderBookCards(books: Book[]) {
       actions.appendChild(readBtn);
     }
 
+    // 复制下载链接按钮
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'btn-copy-link';
+    copyBtn.title = '解析并复制真实下载链接到剪贴板（可粘贴至迅雷/IDM等下载器）';
+    copyBtn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      <span>复制链接</span>
+    `;
+    copyBtn.addEventListener('click', () => handleCopyDownloadLink(book, copyBtn));
+    actions.appendChild(copyBtn);
+
     const downloadBtn = document.createElement('button');
     downloadBtn.className = 'btn-download';
     downloadBtn.innerHTML = `
@@ -479,10 +493,74 @@ function renderBookCards(books: Book[]) {
   bookListEl.appendChild(fragment);
 }
 
+async function handleCopyDownloadLink(book: Book, btn: HTMLButtonElement) {
+  const originalHtml = btn.innerHTML;
+  btn.classList.add('loading');
+  btn.innerHTML = `
+    <span class="mini-spinner"></span>
+    <span>解析中...</span>
+  `;
+
+  try {
+    const downloadUrl = await fetchDownloadUrl(currentSettings.activeNodeUrl, book);
+    await copyToClipboard(downloadUrl);
+
+    btn.classList.remove('loading');
+    btn.classList.add('copied');
+    btn.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polyline points="20 6 9 17 4 12"></polyline>
+      </svg>
+      <span>已复制!</span>
+    `;
+
+    showNotification(`已复制《${book.title}》的真实下载直链到剪贴板`, 'success', 3500);
+
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = originalHtml;
+    }, 2000);
+  } catch (err: any) {
+    console.error('Copy download link error:', err);
+    btn.classList.remove('loading');
+    btn.innerHTML = originalHtml;
+    showNotification(err.message || '获取下载链接失败，请检查登录凭据或节点状态', 'error', 6000);
+  }
+}
+
+async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // 降级使用 textarea 复制
+    }
+  }
+
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.left = '-9999px';
+  textArea.style.top = '-9999px';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    const successful = document.execCommand('copy');
+    if (!successful) throw new Error('复制操作未被支持');
+  } finally {
+    document.body.removeChild(textArea);
+  }
+}
+
 async function handleDownload(book: Book, btn: HTMLButtonElement) {
   const originalHtml = btn.innerHTML;
   btn.classList.add('loading');
-  btn.innerHTML = '<span>解析中...</span>';
+  btn.innerHTML = `
+    <span class="mini-spinner"></span>
+    <span>解析中...</span>
+  `;
 
   try {
     const downloadUrl = await fetchDownloadUrl(currentSettings.activeNodeUrl, book);

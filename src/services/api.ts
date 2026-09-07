@@ -182,14 +182,15 @@ export async function fetchDownloadUrl(
       }
 
       const data = await res.json();
-      if (data?.file?.downloadLink) {
-        return data.file.downloadLink;
+      let link = data?.file?.downloadLink || data?.downloadLink;
+      if (link) {
+        if (link.startsWith('/')) {
+          link = new URL(link, nodeUrl).href;
+        }
+        return link;
       }
-      if (data?.downloadLink) {
-        return data.downloadLink;
-      }
-      if (data?.message) {
-        throw new Error(data.message);
+      if (data?.error || data?.message) {
+        throw new Error(data.error || data.message);
       }
     } catch (err: any) {
       console.warn(`[Z-Lib API] 镜像节点 ${nodeUrl} 获取下载地址失败:`, err.message);

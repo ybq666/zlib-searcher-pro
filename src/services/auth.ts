@@ -119,6 +119,7 @@ export async function resolveCredentials(
 
   // 1. 最高优先级：用户在设置中手动填写的凭据
   if (settings.manualUserId && settings.manualUserKey) {
+    syncCookiesToNode(targetUrl, settings.manualUserId, settings.manualUserKey).catch(() => {});
     return {
       userId: settings.manualUserId.trim(),
       userKey: settings.manualUserKey.trim(),
