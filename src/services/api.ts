@@ -31,9 +31,9 @@ export async function searchBooks(
       'https://z-library.website',
       'https://z-lib.by',
       'http://z-lib.sk',
-      ...settings.nodes.map((n) => n.url)
+      ...settings.nodes.slice(0, 3).map((n) => n.url)
     ].filter(Boolean))
-  );
+  ).slice(0, 4);
 
   let lastError: Error | null = null;
 
@@ -149,9 +149,9 @@ export async function fetchDownloadUrl(
       'https://z-library.website',
       'https://z-lib.by',
       'http://z-lib.sk',
-      ...settings.nodes.map((n) => n.url)
+      ...settings.nodes.slice(0, 3).map((n) => n.url)
     ].filter(Boolean))
-  );
+  ).slice(0, 4);
 
   let lastError: Error | null = null;
 

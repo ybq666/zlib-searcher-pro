@@ -88,22 +88,35 @@ export async function syncCookiesToNode(
   userId: string,
   userKey: string
 ): Promise<void> {
-  if (typeof chrome === 'undefined' || !chrome.cookies?.set) return;
+  if (typeof chrome === 'undefined' || !chrome.cookies?.set || !chrome.cookies?.get) return;
+  if (!userId || !userKey) return;
 
   try {
     const cleanUrl = targetNodeUrl.replace(/\/+$/, '');
-    await chrome.cookies.set({
-      url: cleanUrl,
-      name: 'remix_userid',
-      value: userId,
-      path: '/'
-    });
-    await chrome.cookies.set({
-      url: cleanUrl,
-      name: 'remix_userkey',
-      value: userKey,
-      path: '/'
-    });
+    
+    // 关键优化：先检查当前 Cookie 是否已相同，若完全相同则绝不重复写入，彻底切断与 onChanged 的无限递归回路
+    const [currentId, currentKey] = await Promise.all([
+      chrome.cookies.get({ url: cleanUrl, name: 'remix_userid' }),
+      chrome.cookies.get({ url: cleanUrl, name: 'remix_userkey' })
+    ]);
+
+    if (currentId?.value !== userId) {
+      await chrome.cookies.set({
+        url: cleanUrl,
+        name: 'remix_userid',
+        value: userId,
+        path: '/'
+      });
+    }
+
+    if (currentKey?.value !== userKey) {
+      await chrome.cookies.set({
+        url: cleanUrl,
+        name: 'remix_userkey',
+        value: userKey,
+        path: '/'
+      });
+    }
   } catch (e) {
     console.warn('同步 Cookie 到目标节点失败:', e);
   }
@@ -111,6 +124,7 @@ export async function syncCookiesToNode(
 
 /**
  * 解析当前可用的凭据 (优先级：手动配置 > 全局嗅探 > 目标节点 Cookie)
+ * 纯读取函数，无任何副作用，绝不触发写操作
  */
 export async function resolveCredentials(
   targetUrl: string
@@ -119,7 +133,6 @@ export async function resolveCredentials(
 
   // 1. 最高优先级：用户在设置中手动填写的凭据
   if (settings.manualUserId && settings.manualUserKey) {
-    syncCookiesToNode(targetUrl, settings.manualUserId, settings.manualUserKey).catch(() => {});
     return {
       userId: settings.manualUserId.trim(),
       userKey: settings.manualUserKey.trim(),
@@ -130,8 +143,6 @@ export async function resolveCredentials(
   // 2. 第二优先级：全局跨域嗅探浏览器 Cookie
   const sniffed = await sniffAllZLibCookies();
   if (sniffed.userId && sniffed.userKey) {
-    // 自动回写同步到当前使用的节点
-    syncCookiesToNode(targetUrl, sniffed.userId, sniffed.userKey).catch(() => {});
     return {
       userId: sniffed.userId,
       userKey: sniffed.userKey,
@@ -153,8 +164,10 @@ export async function resolveCredentials(
   return { userId: '', userKey: '', fromSource: '未认证' };
 }
 
+let isFetchingProfile = false;
+
 /**
- * 获取用户信息及下载限额（支持网络异常时自动切换备用镜像节点）
+ * 获取用户信息及下载限额（支持网络异常时自动切换备用镜像节点，具备并发互斥锁）
  */
 export async function fetchUserProfile(
   baseUrl: string,
@@ -162,60 +175,65 @@ export async function fetchUserProfile(
   userKey: string
 ): Promise<UserProfile | null> {
   if (!userId || !userKey) return null;
+  if (isFetchingProfile) return null;
 
-  const settings = await getSettings();
-  const candidateUrls = Array.from(new Set([
-    baseUrl,
-    'https://z-library.website',
-    'https://z-lib.by',
-    'http://z-lib.sk',
-    ...settings.nodes.map((n) => n.url)
-  ])).filter((u) => u && u.startsWith('http'));
+  isFetchingProfile = true;
 
-  for (const nodeUrl of candidateUrls) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 4500);
+  try {
+    const settings = await getSettings();
+    const candidateUrls = Array.from(new Set([
+      baseUrl,
+      'https://z-library.website',
+      'https://z-lib.by',
+      'http://z-lib.sk',
+      ...settings.nodes.slice(0, 3).map((n) => n.url)
+    ])).filter((u) => u && u.startsWith('http')).slice(0, 4);
 
-    try {
-      const endpoint = `${nodeUrl.replace(/\/+$/, '')}/eapi/user/profile`;
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers: {
-          'remix-userid': userId,
-          'remix-userkey': userKey
-        },
-        credentials: 'include',
-        signal: controller.signal
-      });
+    for (const nodeUrl of candidateUrls) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4000);
 
-      clearTimeout(timer);
-      if (!res.ok) continue;
+      try {
+        const endpoint = `${nodeUrl.replace(/\/+$/, '')}/eapi/user/profile`;
+        const res = await fetch(endpoint, {
+          method: 'GET',
+          headers: {
+            'remix-userid': userId,
+            'remix-userkey': userKey
+          },
+          credentials: 'include',
+          signal: controller.signal
+        });
 
-      const json = await res.json();
-      if (json && json.user) {
-        // 若使用了备选节点成功响应，且当前节点不可用，自动切换为该有效节点
-        if (nodeUrl !== settings.activeNodeUrl) {
-          settings.activeNodeUrl = nodeUrl;
-          await saveSettings(settings);
-          await syncCookiesToNode(nodeUrl, userId, userKey);
+        clearTimeout(timer);
+        if (!res.ok) continue;
+
+        const json = await res.json();
+        if (json && json.user) {
+          if (nodeUrl !== settings.activeNodeUrl) {
+            settings.activeNodeUrl = nodeUrl;
+            await saveSettings(settings);
+            await syncCookiesToNode(nodeUrl, userId, userKey);
+          }
+
+          return {
+            id: json.user.id,
+            name: json.user.name || 'Z-Library 读者',
+            email: json.user.email,
+            downloads_today: json.user.downloads_today ?? 0,
+            downloads_limit: json.user.downloads_limit ?? 10,
+            is_donor: json.user.is_donor ?? false
+          };
         }
-
-        return {
-          id: json.user.id,
-          name: json.user.name || 'Z-Library 读者',
-          email: json.user.email,
-          downloads_today: json.user.downloads_today ?? 0,
-          downloads_limit: json.user.downloads_limit ?? 10,
-          is_donor: json.user.is_donor ?? false
-        };
+      } catch {
+        clearTimeout(timer);
       }
-    } catch {
-      clearTimeout(timer);
-      // 当前节点不可达，继续尝试下一个候选节点
     }
-  }
 
-  return null;
+    return null;
+  } finally {
+    isFetchingProfile = false;
+  }
 }
 
 /**
@@ -356,15 +374,23 @@ export async function loginWithCredentials(
   };
 }
 
+let cookieDebounceTimer: any = null;
+
 /**
- * 监听浏览器 Cookie 变更，当用户在其他标签页登录完成时自动回调
+ * 监听浏览器 Cookie 变更，当用户在其他标签页登录完成时自动回调（带防抖控制）
  */
 export function listenCookieChanges(callback: () => void): void {
   if (typeof chrome !== 'undefined' && chrome.cookies?.onChanged) {
     chrome.cookies.onChanged.addListener((changeInfo) => {
       const name = changeInfo.cookie?.name;
       if (name === 'remix_userid' || name === 'remix_userkey') {
-        callback();
+        if (cookieDebounceTimer) {
+          clearTimeout(cookieDebounceTimer);
+        }
+        cookieDebounceTimer = setTimeout(() => {
+          cookieDebounceTimer = null;
+          callback();
+        }, 1200);
       }
     });
   }

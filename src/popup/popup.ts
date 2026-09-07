@@ -170,13 +170,19 @@ function bindEvents() {
     }
   });
 
-  // Infinite scroll listener
+  // Infinite scroll listener (带节流防抖控制)
+  let scrollThrottleTimer: any = null;
   bookScrollContainer.addEventListener('scroll', () => {
     if (isLoading || currentPage >= currentTotalPages) return;
-    const { scrollTop, scrollHeight, clientHeight } = bookScrollContainer;
-    if (scrollTop + clientHeight >= scrollHeight - 80) {
-      loadNextPage();
-    }
+    if (scrollThrottleTimer) return;
+
+    scrollThrottleTimer = setTimeout(() => {
+      scrollThrottleTimer = null;
+      const { scrollTop, scrollHeight, clientHeight } = bookScrollContainer;
+      if (scrollTop + clientHeight >= scrollHeight - 80) {
+        loadNextPage();
+      }
+    }, 150);
   });
 }
 
@@ -228,17 +234,23 @@ async function testCurrentNode() {
   }
 }
 
-async function checkAuthAndUser() {
-  userStatusTextEl.textContent = '正在检查登录状态...';
-  currentAuthState = await getAuthState(currentSettings.activeNodeUrl);
+let isCheckingAuth = false;
 
-  if (currentAuthState.isLoggedIn && currentAuthState.userProfile) {
-    const prof = currentAuthState.userProfile;
-    userStatusTextEl.innerHTML = `已登录: <strong>${escapeHtml(prof.name)}</strong>`;
-    quotaUsedEl.textContent = String(prof.downloads_today);
-    quotaLimitEl.textContent = String(prof.downloads_limit);
-    quotaInfoEl.classList.remove('hidden');
-  } else {
+async function checkAuthAndUser() {
+  if (isCheckingAuth) return;
+  isCheckingAuth = true;
+
+  try {
+    userStatusTextEl.textContent = '正在检查登录状态...';
+    currentAuthState = await getAuthState(currentSettings.activeNodeUrl);
+
+    if (currentAuthState.isLoggedIn && currentAuthState.userProfile) {
+      const prof = currentAuthState.userProfile;
+      userStatusTextEl.innerHTML = `已登录: <strong>${escapeHtml(prof.name)}</strong>`;
+      quotaUsedEl.textContent = String(prof.downloads_today);
+      quotaLimitEl.textContent = String(prof.downloads_limit);
+      quotaInfoEl.classList.remove('hidden');
+    } else {
     quotaInfoEl.classList.add('hidden');
     userStatusTextEl.innerHTML = `
       <span>未登录 ·</span>
@@ -285,6 +297,9 @@ async function checkAuthAndUser() {
       });
     }
   }
+} finally {
+  isCheckingAuth = false;
+}
 }
 
 async function performSearch(isNewSearch: boolean = true) {
@@ -318,13 +333,13 @@ async function performSearch(isNewSearch: boolean = true) {
 
     displaySearchResults(res, !isNewSearch);
 
-    // Save session
+    // Save session (最多缓存前 40 本，节约内存与会话存储开销)
     await setSessionCache('search_session', {
       query: currentQuery,
       extension: currentExtension,
       response: {
         ...res,
-        books: currentBooks
+        books: currentBooks.slice(0, 40)
       }
     });
   } catch (err: any) {

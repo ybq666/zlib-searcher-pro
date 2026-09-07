@@ -16,6 +16,11 @@ export async function testNodeLatency(node: ZLibNode, timeoutMs: number = 4000):
       cache: 'no-store'
     });
 
+    // 释放响应体流资源以立即释放 Chromium 内存
+    if (res.body) {
+      res.body.cancel().catch(() => {});
+    }
+
     clearTimeout(timer);
     const duration = Math.round(performance.now() - startTime);
 
@@ -37,17 +42,26 @@ export async function testNodeLatency(node: ZLibNode, timeoutMs: number = 4000):
 
 export async function testAllNodes(
   nodes: ZLibNode[],
-  onNodeUpdated?: (node: ZLibNode) => void
+  onNodeUpdated?: (node: ZLibNode) => void,
+  concurrency: number = 5
 ): Promise<ZLibNode[]> {
-  const promises = nodes.map(async (n) => {
-    const res = await testNodeLatency(n);
-    if (onNodeUpdated) {
-      onNodeUpdated(res);
+  const results: ZLibNode[] = [...nodes];
+  const queue = nodes.map((node, index) => ({ node, index }));
+
+  // 限制最大并发数为 5，防止瞬间并发数十个网络连接造成内存激增与网络拥塞
+  const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+    while (queue.length > 0) {
+      const item = queue.shift();
+      if (!item) break;
+      const tested = await testNodeLatency(item.node);
+      results[item.index] = tested;
+      if (onNodeUpdated) {
+        onNodeUpdated(tested);
+      }
     }
-    return res;
   });
 
-  const results = await Promise.all(promises);
+  await Promise.all(workers);
   return results;
 }
 

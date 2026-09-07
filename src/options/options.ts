@@ -160,6 +160,7 @@ function renderNodesTable() {
 
   currentSettings.nodes.forEach((node) => {
     const tr = document.createElement('tr');
+    tr.setAttribute('data-node-id', node.id);
     const isActive = node.url === currentSettings.activeNodeUrl;
     if (isActive) tr.classList.add('active-row');
 
@@ -292,6 +293,38 @@ function renderNodesTable() {
   });
 }
 
+function updateSingleRowUI(node: ZLibNode) {
+  const tr = nodesTbody.querySelector(`[data-node-id="${node.id}"]`);
+  if (!tr) return;
+
+  const tdLatency = tr.children[3] as HTMLElement;
+  const tdStatus = tr.children[4] as HTMLElement;
+  if (!tdLatency || !tdStatus) return;
+
+  let latencyClass = 'latency-badge none';
+  let latencyText = '--';
+  if (node.status === 'testing') {
+    latencyText = '测速中...';
+  } else if (node.status === 'available' && node.latency !== undefined) {
+    if (node.latency < 350) latencyClass = 'latency-badge fast';
+    else if (node.latency < 800) latencyClass = 'latency-badge medium';
+    else latencyClass = 'latency-badge slow';
+    latencyText = `${node.latency} ms`;
+  } else if (node.status === 'error') {
+    latencyClass = 'latency-badge slow';
+    latencyText = '不可达';
+  }
+
+  tdLatency.innerHTML = `<span class="${latencyClass}">${latencyText}</span>`;
+
+  let statusText = '○ 未测';
+  if (node.status === 'available') statusText = '● 可用';
+  else if (node.status === 'testing') statusText = '◐ 测试中';
+  else if (node.status === 'error') statusText = '✕ 超时/离线';
+
+  tdStatus.innerHTML = `<span class="status-badge ${node.status}">${statusText}</span>`;
+}
+
 async function handleSpeedtestAll() {
   btnSpeedtestAll.disabled = true;
   btnSpeedtestAll.innerHTML = '<span>正在并发测速...</span>';
@@ -305,7 +338,7 @@ async function handleSpeedtestAll() {
       const idx = currentSettings.nodes.findIndex((n) => n.id === updatedNode.id);
       if (idx !== -1) {
         currentSettings.nodes[idx] = updatedNode;
-        renderNodesTable();
+        updateSingleRowUI(updatedNode);
       }
     });
 
@@ -398,18 +431,27 @@ async function handleAddCustomNode(e: Event) {
   }
 }
 
-async function checkAuthStatus() {
-  authBadge.textContent = '检查中...';
-  authBadge.className = 'badge';
+let isCheckingAuthStatus = false;
 
-  const authState = await getAuthState(currentSettings.activeNodeUrl);
-  if (authState.isLoggedIn && authState.userProfile) {
-    const from = authState.fromSource ? ` · [${authState.fromSource}]` : '';
-    authBadge.textContent = `已认证: ${authState.userProfile.name} (今日已下载 ${authState.userProfile.downloads_today}/${authState.userProfile.downloads_limit})${from}`;
-    authBadge.className = 'badge online';
-  } else {
-    authBadge.textContent = '未检测到有效登录凭据';
+async function checkAuthStatus() {
+  if (isCheckingAuthStatus) return;
+  isCheckingAuthStatus = true;
+
+  try {
+    authBadge.textContent = '检查中...';
     authBadge.className = 'badge';
+
+    const authState = await getAuthState(currentSettings.activeNodeUrl);
+    if (authState.isLoggedIn && authState.userProfile) {
+      const from = authState.fromSource ? ` · [${authState.fromSource}]` : '';
+      authBadge.textContent = `已认证: ${authState.userProfile.name} (今日已下载 ${authState.userProfile.downloads_today}/${authState.userProfile.downloads_limit})${from}`;
+      authBadge.className = 'badge online';
+    } else {
+      authBadge.textContent = '未检测到有效登录凭据';
+      authBadge.className = 'badge';
+    }
+  } finally {
+    isCheckingAuthStatus = false;
   }
 }
 
